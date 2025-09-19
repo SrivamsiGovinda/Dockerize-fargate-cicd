@@ -1,6 +1,4 @@
 #Dockerize-fargate-cicd
-
-
 # ECS Fargate + ECR + CI/CD with GitHub Actions
 ### 1️⃣ Prerequisites
 - AWS account
@@ -78,4 +76,3 @@ terraform destroy -auto-approve
 ```
 
 
----
