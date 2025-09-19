@@ -1,0 +1,55 @@
+name: Build and Deploy to ECS Fargate
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }} # optional if using OIDC
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: "${{ github.repository_owner }}-${{ github.repository }}-repo"
+        run: |
+          IMAGE_TAG=latest
+          IMAGE_URI=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker build -t $IMAGE_URI ./app
+          docker push $IMAGE_URI
+
+      - name: Update ECS task definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        id: render
+        with:
+          task-definition: terraform/taskdef-placeholder.json # we will overwrite locally
+          container-name: "${{ github.repository }}"
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ github.repository_owner }}-${{ github.repository }}-repo:latest
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: myapp-service
+          cluster: myapp-cluster
+          wait-for-service-stability: true
